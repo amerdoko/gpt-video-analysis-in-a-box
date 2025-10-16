@@ -1,0 +1,40 @@
+{
+	"name": "OAIGPT4V",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "GPT4VDeployment",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"open_ai_base": {
+					"value": "@dataset().openai_api_base",
+					"type": "Expression"
+				},
+				"gpt4deployment": {
+					"value": "@dataset().gpt4v_deployment_name",
+					"type": "Expression"
+				}
+			}
+		},
+		"parameters": {
+			"openai_api_base": {
+				"type": "String"
+			},
+			"gpt4v_deployment_name": {
+				"type": "string"
+			},
+			"relative_url": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "RestResource",
+		"typeProperties": {
+			"relativeUrl": {
+				"value": "@dataset().relative_url",
+				"type": "Expression"
+			}
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

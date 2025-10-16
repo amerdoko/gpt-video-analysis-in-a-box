@@ -1,0 +1,15 @@
+{
+	"name": "kvopenai_vision",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "AzureKeyVault",
+		"typeProperties": {
+			"baseUrl": "https://aivid-kv-demo01.vault.azure.net/",
+			"credential": {
+				"type": "CredentialReference",
+				"referenceName": "uamicredential"
+			}
+		}
+	}
+}

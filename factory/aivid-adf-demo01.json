@@ -1,0 +1,13 @@
+{
+	"name": "aivid-adf-demo01",
+	"location": "eastus2",
+	"identity": {
+		"type": "UserAssigned",
+		"userAssignedIdentities": {
+			"/subscriptions/548a1e12-afe2-4dc2-8b83-143d209c03ea/resourcegroups/ai-vid-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/aividuamidemo01": {
+				"clientId": "b0127713-1a3f-485b-8acf-9a5b8aad2f32",
+				"principalId": "3adbc3db-5e09-45ce-96ce-3d1f763bf2c8"
+			}
+		}
+	}
+}

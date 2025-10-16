@@ -1,0 +1,22 @@
+{
+	"name": "lsBlobStorageVideos",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"parameters": {
+			"endpoint": {
+				"type": "string",
+				"defaultValue": "https://aivid0storage0demo01.blob.core.windows.net/"
+			}
+		},
+		"annotations": [],
+		"type": "AzureBlobStorage",
+		"typeProperties": {
+			"serviceEndpoint": "https://aivid0storage0demo01.blob.core.windows.net/",
+			"accountKind": "StorageV2",
+			"credential": {
+				"type": "CredentialReference",
+				"referenceName": "uamicredential"
+			}
+		}
+	}
+}

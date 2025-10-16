@@ -1,0 +1,29 @@
+{
+	"name": "GPT4VDeployment",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"parameters": {
+			"open_ai_base": {
+				"type": "string",
+				"defaultValue": "https://aivid-openai-demo01.openai.azure.com/"
+			},
+			"gpt4deployment": {
+				"type": "string",
+				"defaultValue": "gpt-4v"
+			}
+		},
+		"annotations": [],
+		"type": "RestService",
+		"typeProperties": {
+			"url": "@{linkedService().open_ai_base}",
+			"enableServerCertificateValidation": true,
+			"authenticationType": "ManagedServiceIdentity",
+			"aadResourceId": "https://cognitiveservices.azure.com",
+			"credential": {
+				"type": "CredentialReference",
+				"referenceName": "uamicredential"
+			},
+			"resource": "https://cognitiveservices.azure.com"
+		}
+	}
+}

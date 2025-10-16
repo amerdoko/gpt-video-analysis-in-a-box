@@ -1,0 +1,35 @@
+{
+	"name": "video",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "lsBlobStorageVideos",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"endpoint": {
+					"value": "@dataset().endpoint",
+					"type": "Expression"
+				}
+			}
+		},
+		"parameters": {
+			"container": {
+				"type": "string"
+			},
+			"endpoint": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "Binary",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"container": {
+					"value": "@dataset().container",
+					"type": "Expression"
+				}
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

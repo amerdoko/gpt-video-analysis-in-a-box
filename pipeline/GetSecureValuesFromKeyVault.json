@@ -1,0 +1,217 @@
+{
+	"name": "GetSecureValuesFromKeyVault",
+	"properties": {
+		"activities": [
+			{
+				"name": "get open-api-key",
+				"type": "WebActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": true,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "GET",
+					"url": "https://aivid-kv-demo01.vault.azure.net/secrets/open-api-key?api-version=7.0",
+					"authentication": {
+						"resource": "https://vault.azure.net",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			},
+			{
+				"name": "Set pipeline return variables",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "get open-api-key",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "get open-ai-base",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "get computer-vision-url",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "get computer-vision-api-key",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "get sas-token",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": true,
+					"secureInput": true
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "pipelineReturnValue",
+					"value": [
+						{
+							"key": "open_api_key",
+							"value": {
+								"type": "Expression",
+								"content": "@activity('get open-api-key').output.value"
+							}
+						},
+						{
+							"key": "openai_api_base_url",
+							"value": {
+								"type": "Expression",
+								"content": "@activity('get open-ai-base').output.value"
+							}
+						},
+						{
+							"key": "vision_api_base_url",
+							"value": {
+								"type": "Expression",
+								"content": "@activity('get computer-vision-url').output.value"
+							}
+						},
+						{
+							"key": "vision_api_key",
+							"value": {
+								"type": "Expression",
+								"content": "@activity('get computer-vision-api-key').output.value"
+							}
+						},
+						{
+							"key": "sas_token",
+							"value": {
+								"type": "Expression",
+								"content": "@activity('get sas-token').output.value"
+							}
+						}
+					],
+					"setSystemVariable": true
+				}
+			},
+			{
+				"name": "get open-ai-base",
+				"type": "WebActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "GET",
+					"url": "https://aivid-kv-demo01.vault.azure.net/secrets/openai-api-base-url?api-version=7.0",
+					"authentication": {
+						"resource": "https://vault.azure.net",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			},
+			{
+				"name": "get computer-vision-url",
+				"type": "WebActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "GET",
+					"url": "https://aivid-kv-demo01.vault.azure.net/secrets/vision-api-base-url?api-version=7.0",
+					"authentication": {
+						"resource": "https://vault.azure.net",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			},
+			{
+				"name": "get computer-vision-api-key",
+				"type": "WebActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": true,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "GET",
+					"url": "https://aivid-kv-demo01.vault.azure.net/secrets/vision-api-key?api-version=7.0",
+					"authentication": {
+						"resource": "https://vault.azure.net",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			},
+			{
+				"name": "get sas-token",
+				"type": "WebActivity",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": true,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "GET",
+					"url": "https://aivid-kv-demo01.vault.azure.net/secrets/sas-token?api-version=7.0",
+					"authentication": {
+						"resource": "https://vault.azure.net",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2025-10-16T03:08:31Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

@@ -1,0 +1,26 @@
+{
+	"name": "CosmosDbNoSql1",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"parameters": {
+			"cosmosaccount": {
+				"type": "string",
+				"defaultValue": "https://aivid-cosmos-demo01.documents.azure.com:443/"
+			},
+			"dbname": {
+				"type": "string",
+				"defaultValue": "gpt4vresults-db"
+			}
+		},
+		"annotations": [],
+		"type": "CosmosDb",
+		"typeProperties": {
+			"accountEndpoint": "@{linkedService().cosmosaccount}",
+			"database": "@{linkedService().dbname}",
+			"credential": {
+				"type": "CredentialReference",
+				"referenceName": "uamicredential"
+			}
+		}
+	}
+}

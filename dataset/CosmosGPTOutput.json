@@ -1,0 +1,40 @@
+{
+	"name": "CosmosGPTOutput",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "CosmosDbNoSql1",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"cosmosaccount": {
+					"value": "@dataset().cosmosaccount",
+					"type": "Expression"
+				},
+				"dbname": {
+					"value": "@dataset().cosmosdb",
+					"type": "Expression"
+				}
+			}
+		},
+		"parameters": {
+			"cosmosaccount": {
+				"type": "string"
+			},
+			"cosmosdb": {
+				"type": "string"
+			},
+			"cosmoscontainer": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "CosmosDbSqlApiCollection",
+		"schema": {},
+		"typeProperties": {
+			"collectionName": {
+				"value": "@dataset().cosmoscontainer",
+				"type": "Expression"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

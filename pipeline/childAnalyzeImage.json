@@ -1,0 +1,495 @@
+{
+	"name": "childAnalyzeImage",
+	"properties": {
+		"activities": [
+			{
+				"name": "Analyze Video with GPT-4V Image",
+				"type": "WebActivity",
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 1,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "POST",
+					"headers": {
+						"Content-Type": "application/json",
+						"api-key": {
+							"value": "@pipeline().parameters.open_ai_key",
+							"type": "Expression"
+						}
+					},
+					"url": {
+						"value": "@{pipeline().parameters.openai_api_base}/openai/deployments/@{pipeline().parameters.gpt_4v_deployment_name}/extensions/chat/completions?api-version=2023-12-01-preview",
+						"type": "Expression"
+					},
+					"body": {
+						"value": "{ \"enhancements\": { \"ocr\": { \"enabled\": true },\"grounding\": { \"enabled\": false }},\"dataSources\": [ { \"type\": \"AzureComputerVision\", \"parameters\": { \"endpoint\": \"@{pipeline().parameters.computer_vision_url}\", \"key\": \"@{pipeline().parameters.vision_api_key}\" } } ], \"messages\": [ { \"role\": \"system\", \"content\": [ { \"type\": \"text\", \"text\": \"@{pipeline().parameters.sys_message}\" } ] }, { \"role\": \"user\", \"content\": [ { \"type\": \"text\", \"text\": \"@{pipeline().parameters.user_prompt}\" }, { \"type\": \"image_url\", \"image_url\" :  \"@{pipeline().parameters.storageaccounturl}@{pipeline().parameters.storageaccountfolder}/@{pipeline().parameters.fileName}?@{pipeline().parameters.sas_token}\" } ] } ], @{pipeline().parameters.temperature} @{pipeline().parameters.top_p} \"max_tokens\": 4096 }",
+						"type": "Expression"
+					},
+					"authentication": {
+						"resource": "https://cognitiveservices.azure.com",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			},
+			{
+				"name": "Get Damage Probabilty - image",
+				"description": "Damage[probabliity]",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "GPT4 Response to Cosmos - image",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "CosmosDbSqlApiSource",
+						"query": {
+							"value": "SELECT REPLACE(SUBSTRING(gptoutput.content,INDEX_OF(gptoutput.content,\"damage_probability\")+21,2),\"\\\"\",\"\") AS DamageProbability\nFROM gptoutput WHERE gptoutput.filename='@{pipeline().parameters.fileName}'\n",
+							"type": "Expression"
+						},
+						"preferredRegions": [],
+						"detectDatetime": true
+					},
+					"dataset": {
+						"referenceName": "CosmosGPTOutput",
+						"type": "DatasetReference",
+						"parameters": {
+							"cosmosaccount": {
+								"value": "@pipeline().parameters.cosmosaccount",
+								"type": "Expression"
+							},
+							"cosmosdb": {
+								"value": "@pipeline().parameters.cosmosdb",
+								"type": "Expression"
+							},
+							"cosmoscontainer": {
+								"value": "@pipeline().parameters.cosmoscontainer",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "Set processed folder - image",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "Get Damage Probabilty - image",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "processedfolder",
+					"value": {
+						"value": "@if(equals(activity('Get Damage Probabilty - image').output.firstRow.DamageProbability,'1'),'processed' , 'reviewfordamage')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Move file to processed container - image",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Set processed folder - image",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "BinarySource",
+						"storeSettings": {
+							"type": "AzureBlobStorageReadSettings",
+							"recursive": true,
+							"deleteFilesAfterCompletion": true
+						},
+						"formatSettings": {
+							"type": "BinaryReadSettings"
+						}
+					},
+					"sink": {
+						"type": "BinarySink",
+						"storeSettings": {
+							"type": "AzureBlobStorageWriteSettings"
+						}
+					},
+					"enableStaging": false
+				},
+				"inputs": [
+					{
+						"referenceName": "videofile",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": {
+								"value": "@pipeline().parameters.storageaccountfolder",
+								"type": "Expression"
+							},
+							"filename": {
+								"value": "@pipeline().parameters.fileName",
+								"type": "Expression"
+							},
+							"folder": " ",
+							"endpoint": {
+								"value": "@pipeline().parameters.storageaccounturl",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "videofile",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": "videosprocessed",
+							"filename": {
+								"value": "@pipeline().parameters.fileName",
+								"type": "Expression"
+							},
+							"folder": {
+								"value": "@variables('processedfolder')",
+								"type": "Expression"
+							},
+							"endpoint": {
+								"value": "@pipeline().parameters.storageaccounturl",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "GPT4 Response to Cosmos - image",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 1,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": true
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "RestSource",
+						"additionalColumns": [
+							{
+								"name": "timestamp",
+								"value": {
+									"value": "@pipeline().TriggerTime",
+									"type": "Expression"
+								}
+							},
+							{
+								"name": "fileurl",
+								"value": {
+									"value": "@{pipeline().parameters.storageaccounturl}@{pipeline().parameters.storageaccountfolder}@{pipeline().parameters.fileName}",
+									"type": "Expression"
+								}
+							},
+							{
+								"name": "filename",
+								"value": {
+									"value": "@pipeline().parameters.fileName",
+									"type": "Expression"
+								}
+							},
+							{
+								"name": "shortdate",
+								"value": {
+									"value": "@formatDateTime(pipeline().TriggerTime,'yyyy-MM-dd')",
+									"type": "Expression"
+								}
+							},
+							{
+								"name": "temperature",
+								"value": {
+									"value": "@pipeline().parameters.temperaturevalue",
+									"type": "Expression"
+								}
+							},
+							{
+								"name": "top_p",
+								"value": {
+									"value": "@pipeline().parameters.top_pvalue",
+									"type": "Expression"
+								}
+							}
+						],
+						"httpRequestTimeout": "00:05:00",
+						"requestInterval": "00.00:00:00.010",
+						"requestMethod": "POST",
+						"requestBody": {
+							"value": "{ \"enhancements\": { \"ocr\": { \"enabled\": true },\"grounding\": { \"enabled\": true }},\"dataSources\": [ { \"type\": \"AzureComputerVision\", \"parameters\": { \"endpoint\": \"@{pipeline().parameters.computer_vision_url}\", \"key\": \"@{pipeline().parameters.vision_api_key}\" } } ], \"messages\": [ { \"role\": \"system\", \"content\": [ { \"type\": \"text\", \"text\": \"@{pipeline().parameters.sys_message}\" } ] }, { \"role\": \"user\", \"content\": [ { \"type\": \"text\", \"text\": \"@{pipeline().parameters.user_prompt}\" }, { \"type\":\"image_url\",\"image_url\": { \"url\":\"@{pipeline().parameters.storageaccounturl}@{pipeline().parameters.storageaccountfolder}/@{pipeline().parameters.fileName}?@{pipeline().parameters.sas_token}\", \"detail\": \"high\" } } ] } ], @{pipeline().parameters.temperature} @{pipeline().parameters.top_p} \"max_tokens\": 4096 }",
+							"type": "Expression"
+						},
+						"additionalHeaders": {
+							"api-key": {
+								"value": "@pipeline().parameters.open_ai_key",
+								"type": "Expression"
+							},
+							"Content-Type": "application/json"
+						},
+						"paginationRules": {
+							"supportRFC5988": "true"
+						}
+					},
+					"sink": {
+						"type": "CosmosDbSqlApiSink",
+						"writeBehavior": "insert"
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"mappings": [
+							{
+								"source": {
+									"path": "$['id']"
+								},
+								"sink": {
+									"path": "id"
+								}
+							},
+							{
+								"source": {
+									"path": "$['choices'][0]['message']['content']"
+								},
+								"sink": {
+									"path": "content"
+								}
+							},
+							{
+								"source": {
+									"path": "$['usage']['prompt_tokens']"
+								},
+								"sink": {
+									"path": "prompt_tokens"
+								}
+							},
+							{
+								"source": {
+									"path": "$['usage']['completion_tokens']"
+								},
+								"sink": {
+									"path": "completion_tokens"
+								}
+							},
+							{
+								"source": {
+									"path": "$['timestamp']"
+								},
+								"sink": {
+									"path": "timestamp"
+								}
+							},
+							{
+								"source": {
+									"path": "$['fileurl']"
+								},
+								"sink": {
+									"path": "orignalfileurl"
+								}
+							},
+							{
+								"source": {
+									"path": "$['filename']"
+								},
+								"sink": {
+									"path": "filename"
+								}
+							},
+							{
+								"source": {
+									"path": "$['shortdate']"
+								},
+								"sink": {
+									"path": "shortdate"
+								}
+							},
+							{
+								"source": {
+									"path": "$['temperature']"
+								},
+								"sink": {
+									"path": "temperature"
+								}
+							},
+							{
+								"source": {
+									"path": "$['top_p']"
+								},
+								"sink": {
+									"path": "top_p"
+								}
+							}
+						],
+						"collectionReference": ""
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "OAIGPT4V",
+						"type": "DatasetReference",
+						"parameters": {
+							"openai_api_base": {
+								"value": "@pipeline().parameters.openai_api_base",
+								"type": "Expression"
+							},
+							"gpt4v_deployment_name": {
+								"value": "@pipeline().parameters.gpt_4v_deployment_name",
+								"type": "Expression"
+							},
+							"relative_url": {
+								"value": "@{pipeline().parameters.openai_api_base}/openai/deployments/@{pipeline().parameters.gpt_4v_deployment_name}/extensions/chat/completions?api-version=2023-12-01-preview",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "CosmosGPTOutput",
+						"type": "DatasetReference",
+						"parameters": {
+							"cosmosaccount": {
+								"value": "@pipeline().parameters.cosmosaccount",
+								"type": "Expression"
+							},
+							"cosmosdb": {
+								"value": "@pipeline().parameters.cosmosdb",
+								"type": "Expression"
+							},
+							"cosmoscontainer": {
+								"value": "@pipeline().parameters.cosmoscontainer",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"fileName": {
+				"type": "string",
+				"defaultValue": "Timeline-2023-07-13 12.59.59.740 PM.mp4"
+			},
+			"computer_vision_url": {
+				"type": "string"
+			},
+			"vision_api_key": {
+				"type": "string"
+			},
+			"gpt_4v_deployment_name": {
+				"type": "string"
+			},
+			"open_ai_key": {
+				"type": "string"
+			},
+			"openai_api_base": {
+				"type": "string"
+			},
+			"sys_message": {
+				"type": "string"
+			},
+			"user_prompt": {
+				"type": "string"
+			},
+			"sas_token": {
+				"type": "string"
+			},
+			"storageaccounturl": {
+				"type": "string"
+			},
+			"storageaccountfolder": {
+				"type": "string"
+			},
+			"temperature": {
+				"type": "string"
+			},
+			"top_p": {
+				"type": "string"
+			},
+			"cosmosaccount": {
+				"type": "string"
+			},
+			"cosmosdb": {
+				"type": "string"
+			},
+			"cosmoscontainer": {
+				"type": "string"
+			},
+			"temperaturevalue": {
+				"type": "string"
+			},
+			"top_pvalue": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"indexName": {
+				"type": "String"
+			},
+			"indexID": {
+				"type": "String"
+			},
+			"ingestionStatus": {
+				"type": "String",
+				"defaultValue": "Running"
+			},
+			"sasurl": {
+				"type": "String"
+			},
+			"damageprobablity": {
+				"type": "String"
+			},
+			"processedfolder": {
+				"type": "String"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2025-10-16T03:08:31Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

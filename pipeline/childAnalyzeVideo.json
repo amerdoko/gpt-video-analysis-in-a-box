@@ -1,0 +1,779 @@
+{
+	"name": "childAnalyzeVideo",
+	"properties": {
+		"activities": [
+			{
+				"name": "Set index name",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "indexName",
+					"value": {
+						"value": "@concat('ix',substring(replace(guid(),'-',''),4,19),'-ix')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Set index id",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "Set index name",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "indexID",
+					"value": {
+						"value": "@replace(variables('indexName'),'-ix','-id')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Create Index",
+				"type": "WebActivity",
+				"dependsOn": [
+					{
+						"activity": "Set index id",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "PUT",
+					"headers": {
+						"Content-Type": "application/json",
+						"Ocp-Apim-Subscription-Key": {
+							"value": "@pipeline().parameters.vision_api_key",
+							"type": "Expression"
+						}
+					},
+					"url": {
+						"value": "@{pipeline().parameters.computer_vision_url}computervision/retrieval/indexes/@{variables('indexName')}?api-version=2023-05-01-preview",
+						"type": "Expression"
+					},
+					"body": {
+						"features": [
+							{
+								"name": "vision",
+								"domain": "surveillance"
+							},
+							{
+								"name": "speech"
+							}
+						]
+					},
+					"authentication": {
+						"resource": "https://cognitiveservices.azure.com",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			},
+			{
+				"name": "Ingest Video into Index",
+				"type": "WebActivity",
+				"dependsOn": [
+					{
+						"activity": "Create Index",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": true,
+					"secureInput": true
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"method": "PUT",
+					"headers": {
+						"Content-Type": "application/json",
+						"Ocp-Apim-Subscription-Key": {
+							"value": "@pipeline().parameters.vision_api_key",
+							"type": "Expression"
+						}
+					},
+					"url": {
+						"value": "@{pipeline().parameters.computer_vision_url}computervision/retrieval/indexes/@{variables('indexName')}/ingestions/my-ingestion?api-version=2023-05-01-preview",
+						"type": "Expression"
+					},
+					"body": {
+						"value": "{\"videos\": [{\"mode\": \"add\",\"documentId\": \"@{variables('indexID')}\",\"documentUrl\": \"@{pipeline().parameters.storageaccounturl}@{pipeline().parameters.storageaccountfolder}/@{pipeline().parameters.fileName}?@{pipeline().parameters.sas_token}\"}],\"generateInsightIntervals\": false,\"moderation\": false,\"filterDefectedFrames\": false,\"includeSpeechTranscript\": true}",
+						"type": "Expression"
+					},
+					"authentication": {
+						"resource": "https://cognitiveservices.azure.com",
+						"credential": {
+							"referenceName": "uamicredential",
+							"type": "CredentialReference"
+						},
+						"type": "UserAssignedMSI"
+					}
+				}
+			},
+			{
+				"name": "Check and wait until ingestion complete",
+				"type": "Until",
+				"dependsOn": [
+					{
+						"activity": "Ingest Video into Index",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@or(equals(variables('ingestionStatus'),'Completed'),equals(variables('ingestionStatus'),'Failed'))",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Check if completed",
+							"type": "IfCondition",
+							"dependsOn": [
+								{
+									"activity": "Set ingestion status",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@or(equals(variables('ingestionStatus'),'Completed'),equals(variables('ingestionStatus'),'Failed'))",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "Wait and check again in a bit",
+										"type": "Wait",
+										"dependsOn": [],
+										"userProperties": [],
+										"typeProperties": {
+											"waitTimeInSeconds": 30
+										}
+									}
+								]
+							}
+						},
+						{
+							"name": "Call API to see if ingestion completed",
+							"type": "WebActivity",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"method": "GET",
+								"headers": {
+									"Ocp-Apim-Subscription-Key": {
+										"value": "@pipeline().parameters.vision_api_key",
+										"type": "Expression"
+									}
+								},
+								"url": {
+									"value": "@{pipeline().parameters.computer_vision_url}computervision/retrieval/indexes/@{variables('indexName')}/ingestions?api-version=2023-05-01-preview",
+									"type": "Expression"
+								},
+								"body": "",
+								"authentication": {
+									"resource": "https://cognitiveservices.azure.com",
+									"credential": {
+										"referenceName": "uamicredential",
+										"type": "CredentialReference"
+									},
+									"type": "UserAssignedMSI"
+								}
+							}
+						},
+						{
+							"name": "Set ingestion status",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "Call API to see if ingestion completed",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "ingestionStatus",
+								"value": {
+									"value": "@activity('Call API to see if ingestion completed').output.value[0].state",
+									"type": "Expression"
+								}
+							}
+						}
+					],
+					"timeout": "0.00:15:00"
+				}
+			},
+			{
+				"name": "Check if success",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "Check and wait until ingestion complete",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(variables('ingestionStatus'),'Completed')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "Fail1",
+							"type": "Fail",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"message": "Ingestion failed or timed out",
+								"errorCode": "500"
+							}
+						}
+					],
+					"ifTrueActivities": [
+						{
+							"name": "Analyze Video with GPT-4V",
+							"type": "WebActivity",
+							"state": "Inactive",
+							"onInactiveMarkAs": "Succeeded",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 1,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": true
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"method": "POST",
+								"headers": {
+									"Content-Type": "application/json",
+									"api-key": {
+										"value": "@pipeline().parameters.open_ai_key",
+										"type": "Expression"
+									}
+								},
+								"url": {
+									"value": "@{pipeline().parameters.openai_api_base}/openai/deployments/@{pipeline().parameters.gpt_4v_deployment_name}/extensions/chat/completions?api-version=2023-12-01-preview",
+									"type": "Expression"
+								},
+								"body": {
+									"value": "{\"enhancements\": { \"video\": { \"enabled\": true } }, \"dataSources\": [ { \"type\": \"AzureComputerVisionVideoIndex\", \"parameters\": { \"computerVisionBaseUrl\": \"@{pipeline().parameters.computer_vision_url}//computervision\", \"computerVisionApiKey\": \"@{pipeline().parameters.vision_api_key}\", \"indexName\": \"@{variables('indexName')}\", \"videoUrls\": [\"@{pipeline().parameters.storageaccounturl}/@{pipeline().parameters.storageaccountfolder}/@{pipeline().parameters.fileName}?@{pipeline().parameters.sas_token}\"]}}], \"messages\": [ { \"role\": \"system\", \"content\": [{\"type\": \"text\",\"text\": \"@{pipeline().parameters.sys_message}\" }]}, { \"role\": \"user\", \"content\": [ { \"type\": \"acv_document_id\", \"acv_document_id\": \"@{variables('indexID')}\" } ] }, { \"role\": \"user\", \"content\": [ { \"type\": \"text\", \"text\": \"@{pipeline().parameters.user_prompt}\" } ] } ], @{pipeline().parameters.temperature} @{pipeline().parameters.top_p} \"max_tokens\": 4096 }",
+									"type": "Expression"
+								},
+								"authentication": {
+									"resource": "https://cognitiveservices.azure.com",
+									"credential": {
+										"referenceName": "uamicredential",
+										"type": "CredentialReference"
+									},
+									"type": "UserAssignedMSI"
+								}
+							}
+						},
+						{
+							"name": "Copy GPT4 Response to Cosmos",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 1,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": true
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "RestSource",
+									"additionalColumns": [
+										{
+											"name": "timestamp",
+											"value": {
+												"value": "@pipeline().TriggerTime",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "fileurl",
+											"value": {
+												"value": "@{pipeline().parameters.storageaccounturl}@{pipeline().parameters.storageaccountfolder}@{pipeline().parameters.fileName}",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "filename",
+											"value": {
+												"value": "@pipeline().parameters.fileName",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "shortdate",
+											"value": {
+												"value": "@formatDateTime(pipeline().TriggerTime,'yyyy-MM-dd')",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "temperature",
+											"value": {
+												"value": "@pipeline().parameters.temperaturevalue",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "top_p",
+											"value": {
+												"value": "@pipeline().parameters.top_pvalue",
+												"type": "Expression"
+											}
+										}
+									],
+									"httpRequestTimeout": "00:05:00",
+									"requestInterval": "00.00:00:00.010",
+									"requestMethod": "POST",
+									"requestBody": {
+										"value": "{\"enhancements\": { \"video\": { \"enabled\": true } }, \"dataSources\": [ { \"type\": \"AzureComputerVisionVideoIndex\", \"parameters\": { \"computerVisionBaseUrl\": \"@{pipeline().parameters.computer_vision_url}computervision\", \"computerVisionApiKey\": \"@{pipeline().parameters.vision_api_key}\", \"indexName\": \"@{variables('indexName')}\", \"videoUrls\": [\"@{pipeline().parameters.storageaccounturl}@{pipeline().parameters.storageaccountfolder}/@{pipeline().parameters.fileName}?@{pipeline().parameters.sas_token}\"]}}], \"messages\": [ { \"role\": \"system\", \"content\": [{\"type\": \"text\",\"text\": \"@{pipeline().parameters.sys_message}\" }]}, { \"role\": \"user\", \"content\": [ { \"type\": \"acv_document_id\", \"acv_document_id\": \"@{variables('indexID')}\" } ] }, { \"role\": \"user\", \"content\": [ { \"type\": \"text\", \"text\": \"@{pipeline().parameters.user_prompt}\" } ] } ],  @{pipeline().parameters.temperature} @{pipeline().parameters.top_p} \"max_tokens\": 4096 }",
+										"type": "Expression"
+									},
+									"additionalHeaders": {
+										"api-key": {
+											"value": "@pipeline().parameters.open_ai_key",
+											"type": "Expression"
+										},
+										"Content-Type": "application/json"
+									},
+									"paginationRules": {
+										"supportRFC5988": "true"
+									}
+								},
+								"sink": {
+									"type": "CosmosDbSqlApiSink",
+									"writeBehavior": "insert"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "$['id']"
+											},
+											"sink": {
+												"path": "id"
+											}
+										},
+										{
+											"source": {
+												"path": "$['choices'][0]['message']['content']"
+											},
+											"sink": {
+												"path": "content"
+											}
+										},
+										{
+											"source": {
+												"path": "$['usage']['prompt_tokens']"
+											},
+											"sink": {
+												"path": "prompt_tokens"
+											}
+										},
+										{
+											"source": {
+												"path": "$['usage']['completion_tokens']"
+											},
+											"sink": {
+												"path": "completion_tokens"
+											}
+										},
+										{
+											"source": {
+												"path": "$['timestamp']"
+											},
+											"sink": {
+												"path": "timestamp"
+											}
+										},
+										{
+											"source": {
+												"path": "$['fileurl']"
+											},
+											"sink": {
+												"path": "orignalfileurl"
+											}
+										},
+										{
+											"source": {
+												"path": "$['filename']"
+											},
+											"sink": {
+												"path": "filename"
+											}
+										},
+										{
+											"source": {
+												"path": "$['shortdate']"
+											},
+											"sink": {
+												"path": "shortdate"
+											}
+										},
+										{
+											"source": {
+												"path": "$['temperature']"
+											},
+											"sink": {
+												"path": "temperature"
+											}
+										},
+										{
+											"source": {
+												"path": "$['top_p']"
+											},
+											"sink": {
+												"path": "top_p"
+											}
+										}
+									],
+									"collectionReference": ""
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "OAIGPT4V",
+									"type": "DatasetReference",
+									"parameters": {
+										"openai_api_base": {
+											"value": "@pipeline().parameters.openai_api_base",
+											"type": "Expression"
+										},
+										"gpt4v_deployment_name": {
+											"value": "@pipeline().parameters.gpt_4v_deployment_name",
+											"type": "Expression"
+										},
+										"relative_url": {
+											"value": "@{pipeline().parameters.openai_api_base}/openai/deployments/@{pipeline().parameters.gpt_4v_deployment_name}/extensions/chat/completions?api-version=2023-12-01-preview",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "CosmosGPTOutput",
+									"type": "DatasetReference",
+									"parameters": {
+										"cosmosaccount": {
+											"value": "@pipeline().parameters.cosmosaccount",
+											"type": "Expression"
+										},
+										"cosmosdb": {
+											"value": "@pipeline().parameters.cosmosdb",
+											"type": "Expression"
+										},
+										"cosmoscontainer": {
+											"value": "@pipeline().parameters.cosmoscontainer",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "Get Damage Probabilty",
+							"description": "Damage[probabliity]",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "Copy GPT4 Response to Cosmos",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "CosmosDbSqlApiSource",
+									"query": {
+										"value": "SELECT REPLACE(SUBSTRING(gptoutput.content,INDEX_OF(gptoutput.content,\"damage_probability\")+21,2),\"\\\"\",\"\") AS DamageProbability\nFROM gptoutput WHERE gptoutput.filename='@{pipeline().parameters.fileName}'\n",
+										"type": "Expression"
+									},
+									"preferredRegions": [],
+									"detectDatetime": true
+								},
+								"dataset": {
+									"referenceName": "CosmosGPTOutput",
+									"type": "DatasetReference",
+									"parameters": {
+										"cosmosaccount": {
+											"value": "@pipeline().parameters.cosmosaccount",
+											"type": "Expression"
+										},
+										"cosmosdb": {
+											"value": "@pipeline().parameters.cosmosdb",
+											"type": "Expression"
+										},
+										"cosmoscontainer": {
+											"value": "@pipeline().parameters.cosmoscontainer",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						},
+						{
+							"name": "Set processed folder",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "Get Damage Probabilty",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "processedfolder",
+								"value": {
+									"value": "@if(equals(activity('Get Damage Probabilty').output.firstRow.DamageProbability,'1'),'processed' , 'reviewfordamage')",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Move file to processed container",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "Set processed folder",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "BinarySource",
+									"storeSettings": {
+										"type": "AzureBlobStorageReadSettings",
+										"recursive": true,
+										"deleteFilesAfterCompletion": true
+									},
+									"formatSettings": {
+										"type": "BinaryReadSettings"
+									}
+								},
+								"sink": {
+									"type": "BinarySink",
+									"storeSettings": {
+										"type": "AzureBlobStorageWriteSettings"
+									}
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "videofile",
+									"type": "DatasetReference",
+									"parameters": {
+										"container": {
+											"value": "@pipeline().parameters.storageaccountfolder",
+											"type": "Expression"
+										},
+										"filename": {
+											"value": "@pipeline().parameters.fileName",
+											"type": "Expression"
+										},
+										"folder": " ",
+										"endpoint": {
+											"value": "@pipeline().parameters.storageaccounturl",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "videofile",
+									"type": "DatasetReference",
+									"parameters": {
+										"container": "videosprocessed",
+										"filename": {
+											"value": "@pipeline().parameters.fileName",
+											"type": "Expression"
+										},
+										"folder": {
+											"value": "@variables('processedfolder')",
+											"type": "Expression"
+										},
+										"endpoint": {
+											"value": "@pipeline().parameters.storageaccounturl",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"fileName": {
+				"type": "string",
+				"defaultValue": "Timeline-2023-07-13 12.59.59.740 PM.mp4"
+			},
+			"computer_vision_url": {
+				"type": "string"
+			},
+			"vision_api_key": {
+				"type": "string"
+			},
+			"gpt_4v_deployment_name": {
+				"type": "string"
+			},
+			"open_ai_key": {
+				"type": "string"
+			},
+			"openai_api_base": {
+				"type": "string"
+			},
+			"sys_message": {
+				"type": "string"
+			},
+			"user_prompt": {
+				"type": "string"
+			},
+			"sas_token": {
+				"type": "string"
+			},
+			"storageaccounturl": {
+				"type": "string"
+			},
+			"storageaccountfolder": {
+				"type": "string"
+			},
+			"temperature": {
+				"type": "string"
+			},
+			"top_p": {
+				"type": "string"
+			},
+			"cosmosaccount": {
+				"type": "string"
+			},
+			"cosmosdb": {
+				"type": "string"
+			},
+			"cosmoscontainer": {
+				"type": "string"
+			},
+			"temperaturevalue": {
+				"type": "string"
+			},
+			"top_pvalue": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"indexName": {
+				"type": "String"
+			},
+			"indexID": {
+				"type": "String"
+			},
+			"ingestionStatus": {
+				"type": "String",
+				"defaultValue": "Running"
+			},
+			"sasurl": {
+				"type": "String"
+			},
+			"damageprobablity": {
+				"type": "String"
+			},
+			"processedfolder": {
+				"type": "String"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2025-10-16T03:08:31Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

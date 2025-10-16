@@ -1,0 +1,410 @@
+{
+	"name": "orchestratorGetandAnalyzeVideos",
+	"properties": {
+		"activities": [
+			{
+				"name": "Get Files",
+				"type": "GetMetadata",
+				"dependsOn": [
+					{
+						"activity": "Get Secure Values from Key Vault",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "Check if top_p is specified",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "Check if temperature is specified",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"dataset": {
+						"referenceName": "video",
+						"type": "DatasetReference",
+						"parameters": {
+							"container": {
+								"value": "@pipeline().parameters.storageaccountcontainer",
+								"type": "Expression"
+							},
+							"endpoint": {
+								"value": "@pipeline().parameters.storageaccounturl",
+								"type": "Expression"
+							}
+						}
+					},
+					"fieldList": [
+						"childItems"
+					],
+					"storeSettings": {
+						"type": "AzureBlobStorageReadSettings",
+						"recursive": true,
+						"enablePartitionDiscovery": false
+					},
+					"formatSettings": {
+						"type": "BinaryReadSettings"
+					}
+				}
+			},
+			{
+				"name": "Get Secure Values from Key Vault",
+				"type": "ExecutePipeline",
+				"dependsOn": [],
+				"policy": {
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"pipeline": {
+						"referenceName": "GetSecureValuesFromKeyVault",
+						"type": "PipelineReference"
+					},
+					"waitOnCompletion": true
+				}
+			},
+			{
+				"name": "ForEach File",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Get Files",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Get Files').output.childItems",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"activities": [
+						{
+							"name": "Check if Video or Image",
+							"type": "IfCondition",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@contains(toUpper(trim(substring(item().name,add(lastindexof(item().name,'.'),1),3))),'MP4')",
+									"type": "Expression"
+								},
+								"ifFalseActivities": [
+									{
+										"name": "childAnalyzeImage",
+										"type": "ExecutePipeline",
+										"dependsOn": [],
+										"policy": {
+											"secureInput": true
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"pipeline": {
+												"referenceName": "childAnalyzeImage",
+												"type": "PipelineReference"
+											},
+											"waitOnCompletion": true,
+											"parameters": {
+												"fileName": {
+													"value": "@item().name",
+													"type": "Expression"
+												},
+												"computer_vision_url": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.vision_api_base_url",
+													"type": "Expression"
+												},
+												"vision_api_key": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.vision_api_key",
+													"type": "Expression"
+												},
+												"gpt_4v_deployment_name": {
+													"value": "gpt-4v",
+													"type": "Expression"
+												},
+												"open_ai_key": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.open_api_key",
+													"type": "Expression"
+												},
+												"openai_api_base": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.openai_api_base_url",
+													"type": "Expression"
+												},
+												"sys_message": {
+													"value": "@pipeline().parameters.sys_message",
+													"type": "Expression"
+												},
+												"user_prompt": {
+													"value": "@pipeline().parameters.user_prompt",
+													"type": "Expression"
+												},
+												"sas_token": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.sas_token",
+													"type": "Expression"
+												},
+												"storageaccounturl": {
+													"value": "@pipeline().parameters.storageaccounturl",
+													"type": "Expression"
+												},
+												"storageaccountfolder": {
+													"value": "@pipeline().parameters.storageaccountcontainer",
+													"type": "Expression"
+												},
+												"temperature": {
+													"value": "@variables('temperature')",
+													"type": "Expression"
+												},
+												"top_p": {
+													"value": "@variables('top_p')",
+													"type": "Expression"
+												},
+												"cosmosaccount": {
+													"value": "@pipeline().parameters.cosmosaccount",
+													"type": "Expression"
+												},
+												"cosmosdb": {
+													"value": "@pipeline().parameters.cosmosdb",
+													"type": "Expression"
+												},
+												"cosmoscontainer": {
+													"value": "@pipeline().parameters.cosmoscontainer",
+													"type": "Expression"
+												},
+												"temperaturevalue": {
+													"value": "@pipeline().parameters.temperature",
+													"type": "Expression"
+												},
+												"top_pvalue": {
+													"value": "@pipeline().parameters.top_p",
+													"type": "Expression"
+												}
+											}
+										}
+									}
+								],
+								"ifTrueActivities": [
+									{
+										"name": "childAnalyzeVideo",
+										"type": "ExecutePipeline",
+										"dependsOn": [],
+										"policy": {
+											"secureInput": true
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"pipeline": {
+												"referenceName": "childAnalyzeVideo",
+												"type": "PipelineReference"
+											},
+											"waitOnCompletion": true,
+											"parameters": {
+												"fileName": {
+													"value": "@item().name",
+													"type": "Expression"
+												},
+												"computer_vision_url": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.vision_api_base_url",
+													"type": "Expression"
+												},
+												"vision_api_key": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.vision_api_key",
+													"type": "Expression"
+												},
+												"gpt_4v_deployment_name": {
+													"value": "gpt-4v",
+													"type": "Expression"
+												},
+												"open_ai_key": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.open_api_key",
+													"type": "Expression"
+												},
+												"openai_api_base": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.openai_api_base_url",
+													"type": "Expression"
+												},
+												"sys_message": {
+													"value": "@pipeline().parameters.sys_message",
+													"type": "Expression"
+												},
+												"user_prompt": {
+													"value": "@pipeline().parameters.user_prompt",
+													"type": "Expression"
+												},
+												"sas_token": {
+													"value": "@activity('Get Secure Values from Key Vault').output.pipelineReturnValue.sas_token",
+													"type": "Expression"
+												},
+												"storageaccounturl": {
+													"value": "@pipeline().parameters.storageaccounturl",
+													"type": "Expression"
+												},
+												"storageaccountfolder": {
+													"value": "@pipeline().parameters.storageaccountcontainer",
+													"type": "Expression"
+												},
+												"temperature": {
+													"value": "@variables('temperature')",
+													"type": "Expression"
+												},
+												"top_p": {
+													"value": "@variables('top_p')",
+													"type": "Expression"
+												},
+												"cosmosaccount": {
+													"value": "@pipeline().parameters.cosmosaccount",
+													"type": "Expression"
+												},
+												"cosmosdb": {
+													"value": "@pipeline().parameters.cosmosdb",
+													"type": "Expression"
+												},
+												"cosmoscontainer": {
+													"value": "@pipeline().parameters.cosmoscontainer",
+													"type": "Expression"
+												},
+												"temperaturevalue": {
+													"value": "@pipeline().parameters.temperature",
+													"type": "Expression"
+												},
+												"top_pvalue": {
+													"value": "@pipeline().parameters.top_p",
+													"type": "Expression"
+												}
+											}
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Check if top_p is specified",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(trim(string(pipeline().parameters.top_p)),'')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "Set top_p detail option",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "top_p",
+								"value": {
+									"value": "\"top_p\": @{pipeline().parameters.top_p},",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Check if temperature is specified",
+				"type": "IfCondition",
+				"dependsOn": [],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(trim(string(pipeline().parameters.temperature)),'')",
+						"type": "Expression"
+					},
+					"ifFalseActivities": [
+						{
+							"name": "Set temperature",
+							"type": "SetVariable",
+							"dependsOn": [],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "temperature",
+								"value": {
+									"value": "\"temperature\": @{pipeline().parameters.temperature},",
+									"type": "Expression"
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"sys_message": {
+				"type": "string",
+				"defaultValue": "Your task is to analyze construction site safety. You will be presented videos or images of construction workers. You need to inspect the video or image closely and determine if there are any safety violations, such as missing hard hats, lack of safety vests, unsafe practices, etc. You will provide the following information in JSON format: {\"summary\":\"\", \"safety_violation_probability\":\"\",\"violation_type\":\"\",\"worker_description\":\"\"}. Do not return as code block. The definitions for each JSON field are as follows: summary = a description of what you see and any safety violations found; safety_violation_probability = a value between 1 and 10 where 1 is no violations found, 5 is some likelihood of violation, and 10 is obvious violation; violation_type = the type of safety violation such as missing hard hat, no safety vest, unsafe ladder use; worker_description = description of the worker and their location in the scene."
+			},
+			"user_prompt": {
+				"type": "string",
+				"defaultValue": "Describe any safety violations you see in the video, particularly focusing on whether the construction worker is wearing proper safety equipment like a hard hat. Return the results in the specified JSON format."
+			},
+			"storageaccounturl": {
+				"type": "string",
+				"defaultValue": "https://aivid0storage0demo01.blob.core.windows.net/"
+			},
+			"storageaccountcontainer": {
+				"type": "string",
+				"defaultValue": "videosin"
+			},
+			"temperature": {
+				"type": "string",
+				"defaultValue": "0.5"
+			},
+			"top_p": {
+				"type": "string"
+			},
+			"cosmosaccount": {
+				"type": "string",
+				"defaultValue": "https://aivid-cosmos-demo01.documents.azure.com:443/"
+			},
+			"cosmosdb": {
+				"type": "string",
+				"defaultValue": "gpt4vresults-db"
+			},
+			"cosmoscontainer": {
+				"type": "string",
+				"defaultValue": "gptoutput"
+			}
+		},
+		"variables": {
+			"top_p": {
+				"type": "String"
+			},
+			"temperature": {
+				"type": "String"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2025-10-16T04:22:13Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
